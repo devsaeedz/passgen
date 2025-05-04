@@ -27,7 +27,7 @@ def show_help():
     print("\t passgen.py [options] <RULES> [OUTPUT_FILE_PATH]")
     print("\n Options:")
     print("\t -p N\t\tUse N processes for parallel processing (default: CPU count)")
-    print("\t --show-passwords\tPrint generated passwords to console (default: disabled)")
+    print("\t -s, --show-passwords\tPrint generated passwords to console (default: disabled)")
     print("\t -v, --verbose\tShow detailed information during execution")
     print("\t -y, --yes\tSkip confirmation and start generating immediately")
     print("\n Example Usages: ")
@@ -392,7 +392,7 @@ def main():
             except ValueError:
                 print(f"Invalid process count. Using default ({process_count}).")
                 i += 2
-        elif arg == '--show-passwords':
+        elif arg == '-s' or arg == '--show-passwords':
             show_passwords = True
             i += 1
         elif arg == '-v' or arg == '--verbose':
@@ -412,6 +412,12 @@ def main():
     global args, output_path
     args = processed_args[0]
     output_path = processed_args[1] if len(processed_args) > 1 else ''
+    
+    # Ensure that either show_passwords is enabled or an output file is specified
+    if not show_passwords and not output_path:
+        print("Error: You must either enable password display (-s, --show-passwords) or specify an output file.")
+        print("Use passgen.py --help for more information.")
+        exit(1)
     
     # Parse rules and generate passwords
     rules = parseRules(args)
