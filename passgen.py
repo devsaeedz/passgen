@@ -1,5 +1,6 @@
 import re
 import sys
+from sys import exit
 import os
 import time
 import multiprocessing
@@ -23,10 +24,10 @@ def show_logo():
                                        
     """)
     print(" A rules-based tool for generating passwords and wordlists | Author: @devsaeedz (Github)")
+    print(" Version: 1.0")
     print("\n")
 
 def show_help():
-    """Show help information"""
     print("\n Usage: ")
     print("\t passgen.py [options] <RULES> [OUTPUT_FILE_PATH]")
     
@@ -128,7 +129,6 @@ def format_size(size_bytes):
 
 
 def load_wordlist(wordlist_path, wordlist_dir=None):
-    """Load words from a wordlist file."""
     global verbose
     words = []
     try:
@@ -141,10 +141,6 @@ def load_wordlist(wordlist_path, wordlist_dir=None):
                 print(f"Warning: Wordlist file not found: {wordlist_path}")
                 return words
         else:
-            # Try in the following order:
-            # 1. User-specified wordlist directory (if provided)
-            # 2. Current directory
-            # 3. Script directory
             
             if wordlist_dir and os.path.exists(os.path.join(wordlist_dir, wordlist_path)):
                 full_path = os.path.join(wordlist_dir, wordlist_path)
@@ -323,9 +319,6 @@ def calculate_combinations_and_size(rules_arr):
         
         avg_password_length = total_sample_length / sample_size
         
-        # Add 1 for newline character and adjust for system file representation
-        # Windows uses CRLF which is 2 bytes, Unix uses LF which is 1 byte
-        # Use 1.1 as a correction factor based on the observed data
         line_ending_size = 1.1  
         estimated_size = int(total_combinations * (avg_password_length + line_ending_size))
     

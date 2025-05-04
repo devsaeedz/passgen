@@ -1,0 +1,12 @@
+# The tool only uses standard library modules:
+# - re
+# - sys
+# - os
+# - time
+# - multiprocessing
+# - itertools (product)
+# - tempfile
+# - random
+
+# No external dependencies are required.
+# Python version 3.6 or higher is recommended for f-string support. 
