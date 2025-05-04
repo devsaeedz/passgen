@@ -1,6 +1,6 @@
 # PassGen
 
-PassGen is a powerful password generation tool that creates wordlists based on customizable rules to generate comprehensive password lists for security testing.
+PassGen is a powerful password generation tool that creates wordlists based on customizable rules.
 
 ![PassGen Screenshot](screenshot.png)
 
