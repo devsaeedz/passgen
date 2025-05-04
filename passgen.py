@@ -7,6 +7,10 @@ from itertools import product
 import tempfile
 import random
 
+# Global variables
+args = None
+output_path = None
+verbose = False
 
 def show_logo():
     print("""
@@ -18,27 +22,42 @@ def show_logo():
  |_|   \\__,_|___/___/\\_____|\\__|_| |_|
                                        
     """)
-    print("\n A rules-based tool for generating passwords and wordlists | Author: @devsaeedz (Github)")
-
+    print(" A rules-based tool for generating passwords and wordlists | Author: @devsaeedz (Github)")
+    print("\n")
 
 def show_help():
     """Show help information"""
     print("\n Usage: ")
     print("\t passgen.py [options] <RULES> [OUTPUT_FILE_PATH]")
+    
     print("\n Options:")
     print("\t -p N\t\tUse N processes for parallel processing (default: CPU count)")
     print("\t -s, --show-passwords\tPrint generated passwords to console (default: disabled)")
     print("\t -v, --verbose\tShow detailed information during execution")
     print("\t -y, --yes\tSkip confirmation and start generating immediately")
+    print("\t -w, --wordlist-dir\tSpecify directory to search for wordlist files")
+    print("\t -h, --help\tShow this help message and exit")
+    
+    print("\n Rule Syntax:")
+    print("\t Regular: ['a','b']['1','2'] - Generates: a1, a2, b1, b2")
+    print("\t Range: ['a..c']['0..2'] - Generates: a0, a1, a2, b0, b1, b2, c0, c1, c2")
+    print("\t Wordlist: [wordlist:filename.txt]['!'] - Uses each line from file as an option")
+    
+    print("\n Notes:")
+    print("\t - Range notation supports only alphanumeric characters (a-z, A-Z, 0-9)")
+    print("\t - Wordlist files are searched in: specified dir, current dir, script dir")
+    print("\t - At least one output method (file or -s) must be specified")
+    print("\t - Full paths are supported on both Windows and Linux systems")
+    
     print("\n Example Usages: ")
     print("\t passgen.py \"['p']['a']['s']['s']['w']['o']['r']['d']\"")
-    print("\t passgen.py \"['p','P']['a','A']['s','S']['s','S']['w','W']['o','O']['r','R']['d','D']\"")
-    print("\t passgen.py \"['p','P']['a','A','@']['s','S','$']['s','S','$']['w','W']['o','O','0']['r','R']['d','D']\"")
-    print("\t passgen.py -p 8 \"['p','P']['a','A']['s','S']['s','S']['w','W']['o','O']['r','R']['d','D']\"")
-    print("\t passgen.py -p 16 -v --show-passwords \"['p','P']['a','A']['s','S']['s','S']['w','W']['o','O']['r','R']['d','D']\" passwords.txt")
-    print("\n Range Notation:")
-    print("\t passgen.py \"['a..c']['0..5'][2..3]\"  # Quotes are optional")
-    print("\t Note: Range notation only supports alphanumeric characters (a-z, A-Z, 0-9)")
+    print("\t passgen.py \"['p','P']['a','A','@']['s','S', '$']['s','S','$']['w','W']['o','O','0']['r','R']['d','D']\"")
+    print("\t passgen.py \"['a..c']['0..5'][2..3]\" output.txt")
+    print("\t passgen.py -s -y \"[wordlist:common_passwords.txt]['!','@','#']\"")
+    print("\t passgen.py -p 8 -w wordlists \"[wordlist:custom.txt]['0..9']\" results.txt")
+    print("\t passgen.py \"[wordlist:C:/path/to/wordlists/common.txt]['!']\"")
+    print("\t passgen.py \"[wordlist:/home/user/wordlists/common.txt]['!']\"")
+    print("\n")
     exit(0)
 
 
@@ -108,7 +127,61 @@ def format_size(size_bytes):
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
-def parseRules(t):
+def load_wordlist(wordlist_path, wordlist_dir=None):
+    """Load words from a wordlist file."""
+    global verbose
+    words = []
+    try:
+        # Check if path is absolute
+        if os.path.isabs(wordlist_path):
+            full_path = wordlist_path
+            
+            # If doesn't exist, return empty
+            if not os.path.exists(full_path):
+                print(f"Warning: Wordlist file not found: {wordlist_path}")
+                return words
+        else:
+            # Try in the following order:
+            # 1. User-specified wordlist directory (if provided)
+            # 2. Current directory
+            # 3. Script directory
+            
+            if wordlist_dir and os.path.exists(os.path.join(wordlist_dir, wordlist_path)):
+                full_path = os.path.join(wordlist_dir, wordlist_path)
+            elif os.path.exists(wordlist_path):
+                full_path = wordlist_path
+            else:
+                # Try relative to script location
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                full_path = os.path.join(script_dir, wordlist_path)
+                
+                # If still doesn't exist, return empty
+                if not os.path.exists(full_path):
+                    print(f"Warning: Wordlist file not found: {wordlist_path}")
+                    print(f"Searched in: current directory, {wordlist_dir or 'no wordlist dir specified'}, and {script_dir}")
+                    return words
+        
+        if verbose:
+            print(f"Reading wordlist from: {full_path}")
+            
+        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                word = line.strip()
+                if word:  # Skip empty lines
+                    words.append(word)
+        
+        if verbose:
+            print(f"Loaded {len(words)} words from {wordlist_path}")
+            
+        if not words:
+            print(f"Warning: No words found in wordlist file: {wordlist_path}")
+    except Exception as e:
+        print(f"Error loading wordlist {wordlist_path}: {e}")
+    
+    return words
+
+
+def parseRules(t, wordlist_dir=None):
     rules_arr = []
     # Look for both quoted and unquoted range patterns in brackets
     bracket_pattern = r'\[(.*?)\]'
@@ -121,11 +194,22 @@ def parseRules(t):
     for bracket_content in brackets:
         rule_arr = []
         
+        # Check for wordlist notation: wordlist:filename.txt
+        wordlist_match = re.match(r'wordlist:(.+)$', bracket_content.strip())
+        if wordlist_match:
+            # Extract filename from the match
+            wordlist_file = wordlist_match.group(1).strip()
+            # Load words from wordlist
+            words = load_wordlist(wordlist_file, wordlist_dir)
+            if words:
+                rule_arr.extend(words)
+            else:
+                print(f"Error: No valid words found in wordlist: {wordlist_file}")
+                exit(1)
         # Check for range notation without quotes
-        range_match = re.match(r'(\S)\.\.(\S)$', bracket_content)
-        if range_match:
+        elif re.match(r'(\S)\.\.(\S)$', bracket_content):
             # Direct range notation without quotes: [0..9]
-            start, end = range_match.groups()
+            start, end = re.match(r'(\S)\.\.(\S)$', bracket_content).groups()
             
             # Validate the range characters
             is_valid, error_msg = validate_range(start, end)
@@ -323,22 +407,34 @@ def generatePasswordsMultiprocess(rules_arr, num_processes, show_passwords=False
     password_count = 0
     if output_path:
         with open(output_path, 'w') as out_file:
+            all_passwords = []
+            # First collect all passwords from temp files
             for temp_file in temp_files:
                 try:
                     with open(temp_file, 'r') as f:
                         for line in f:
                             password = line.strip()
                             if password:
-                                if show_passwords:
-                                    print(password)
-                                out_file.write(f"{password}\n")
-                                password_count += 1
+                                all_passwords.append(password)
                     # Clean up
                     os.unlink(temp_file)
                     if verbose:
                         print(f"Processed and removed temporary file: {temp_file}")
                 except Exception as e:
                     print(f"Warning: Error reading temp file {temp_file}: {e}")
+            
+            # Then write all passwords to output file (with proper handling of the last line)
+            for idx, password in enumerate(all_passwords):
+                if show_passwords:
+                    print(password)
+                
+                # Write to file with newline except for the last password
+                if idx < len(all_passwords) - 1:
+                    out_file.write(f"{password}\n")
+                else:
+                    out_file.write(f"{password}")
+                
+                password_count += 1
     else:
         for temp_file in temp_files:
             try:
@@ -367,15 +463,16 @@ def main():
     # Always display logo and tool name
     show_logo()
     
-    # Display help if no arguments provided
-    if len(sys.argv) == 1:
+    # Check for help flag first
+    if len(sys.argv) == 1 or '-h' in sys.argv or '--help' in sys.argv:
         show_help()
     
     # Parse command-line arguments
     process_count = multiprocessing.cpu_count()  # Default to CPU count
     show_passwords = False
-    verbose = False
+    local_verbose = False
     skip_confirmation = False
+    wordlist_dir = None
     
     # Process arguments
     args_list = sys.argv[1:]
@@ -385,7 +482,10 @@ def main():
     while i < len(args_list):
         arg = args_list[i]
         
-        if arg == '-p' and i+1 < len(args_list):
+        if arg == '-h' or arg == '--help':
+            # Skip these as they're handled earlier
+            i += 1
+        elif arg == '-p' and i+1 < len(args_list):
             try:
                 process_count = int(args_list[i+1])
                 i += 2
@@ -396,11 +496,18 @@ def main():
             show_passwords = True
             i += 1
         elif arg == '-v' or arg == '--verbose':
-            verbose = True
+            local_verbose = True
             i += 1
         elif arg == '-y' or arg == '--yes':
             skip_confirmation = True
             i += 1
+        elif (arg == '-w' or arg == '--wordlist-dir') and i+1 < len(args_list):
+            wordlist_dir = args_list[i+1]
+            if not os.path.isdir(wordlist_dir):
+                print(f"Warning: Wordlist directory does not exist: {wordlist_dir}")
+                print("Will search in current directory and script directory instead.")
+                wordlist_dir = None
+            i += 2
         else:
             processed_args.append(arg)
             i += 1
@@ -409,9 +516,10 @@ def main():
         print("Missing password rules argument.")
         exit(1)
     
-    global args, output_path
+    global args, output_path, verbose
     args = processed_args[0]
     output_path = processed_args[1] if len(processed_args) > 1 else ''
+    verbose = local_verbose
     
     # Ensure that either show_passwords is enabled or an output file is specified
     if not show_passwords and not output_path:
@@ -420,7 +528,7 @@ def main():
         exit(1)
     
     # Parse rules and generate passwords
-    rules = parseRules(args)
+    rules = parseRules(args, wordlist_dir)
     generatePasswordsMultiprocess(rules, process_count, show_passwords, verbose, skip_confirmation)
 
 
