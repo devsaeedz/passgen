@@ -406,33 +406,34 @@ def generatePasswordsMultiprocess(rules_arr, num_processes, show_passwords=False
     # Collect results from temp files
     password_count = 0
     if output_path:
-        with open(output_path, 'w') as out_file:
-            all_passwords = []
-            # First collect all passwords from temp files
-            for temp_file in temp_files:
-                try:
-                    with open(temp_file, 'r') as f:
-                        for line in f:
-                            password = line.strip()
-                            if password:
-                                all_passwords.append(password)
-                    # Clean up
-                    os.unlink(temp_file)
-                    if verbose:
-                        print(f"Processed and removed temporary file: {temp_file}")
-                except Exception as e:
-                    print(f"Warning: Error reading temp file {temp_file}: {e}")
-            
-            # Then write all passwords to output file (with proper handling of the last line)
+        # First collect all passwords from temp files
+        all_passwords = []
+        for temp_file in temp_files:
+            try:
+                with open(temp_file, 'r') as f:
+                    for line in f:
+                        password = line.strip()
+                        if password:
+                            all_passwords.append(password)
+                # Clean up
+                os.unlink(temp_file)
+                if verbose:
+                    print(f"Processed and removed temporary file: {temp_file}")
+            except Exception as e:
+                print(f"Warning: Error reading temp file {temp_file}: {e}")
+        
+        # Then write all passwords to output file using binary mode to control line endings precisely
+        with open(output_path, 'wb') as out_file:
             for idx, password in enumerate(all_passwords):
                 if show_passwords:
                     print(password)
                 
-                # Write to file with newline except for the last password
+                # Write the password
+                out_file.write(password.encode('utf-8'))
+                
+                # Add newline except after the last password
                 if idx < len(all_passwords) - 1:
-                    out_file.write(f"{password}\n")
-                else:
-                    out_file.write(f"{password}")
+                    out_file.write(b'\n')  # Using binary mode for precise control
                 
                 password_count += 1
     else:
